@@ -2,6 +2,16 @@
 # Top-level metadata
 # ==================
 
+# /usr/include/bits/stdio2.h: In function 'my_fgets':
+# /usr/include/bits/stdio2.h:258:2: warning: call to '__fgets_chk_warn' declared with attribute
+# warning: fgets called with bigger size than length of destination buffer [enabled by default]
+#   return __fgets_chk (__s, __bos (__s), __n, __stream);
+# There is a lot of build errors with default macros params.
+# I think it depends to EPEL7 glibc version (2.17-260).
+# Python 3.7 requres glibc >= 2.24.90-26 to use secure flags.
+#  https://stackoverflow.com/questions/13517526/difference-between-gcc-d-fortify-source-1-and-d-fortify-source-2
+# that's why D_FORTIFY_SOURCE is disabled here:
+%global __global_cflags -O2 -g -pipe -Wall -Wp,-D_FORTIFY_SOURCE=0 -fexceptions -fstack-protector-strong --param=ssp-buffer-size=4 -grecord-gcc-switches %{_hardened_cflags} %{_performance_cflags}
 
 %global pybasever 3.7
 
@@ -22,7 +32,7 @@ URL: https://www.python.org/
 #  WARNING  When rebasing to a new Python version,
 #           remember to update the python3-docs package as well
 Version: %{pybasever}.2
-Release: 6%{?dist}
+Release: 7%{?dist}
 License: Python
 
 
@@ -35,8 +45,7 @@ License: Python
 
 # Expensive optimizations (mainly, profile-guided optimizations)
 %ifarch %{ix86} x86_64
-# TODO: revert this to enable running test suites to generate data for profiling Python.
-%bcond_with optimizations
+%bcond_without optimizations
 %else
 # On some architectures, the optimized build takes tens of hours, possibly
 # longer than Koji's 24-hour timeout. Disable optimizations here.
@@ -44,20 +53,17 @@ License: Python
 %endif
 
 # Run the test suite in %%check
-# TODO: need to enable tests
-%bcond_with tests
+%bcond_without tests
 
 # Extra build for debugging the interpreter or C-API extensions
 # (the -debug subpackages)
-# TODO: need to enable debug_build
-%bcond_with debug_build
+%bcond_without debug_build
 
 # Support for the GDB debugger
-# TODO: need to enable gdb_hooks
-%bcond_with gdb_hooks
+%bcond_without gdb_hooks
 
 # The dbm.gnu module (key-value database)
-%bcond_with gdbm
+%bcond_without gdbm
 
 # Main interpreter loop optimization
 %bcond_without computed_gotos
@@ -67,7 +73,7 @@ License: Python
 %bcond_without valgrind
 %else
 # Some arches don't have valgrind, disable support for it there.
-%bcond_with valgrind
+%bcond_without valgrind
 %endif
 
 
@@ -618,7 +624,6 @@ BuildPython() {
   --with-system-expat \
   --with-system-ffi \
   --enable-loadable-sqlite-extensions \
-  --with-dtrace \
   --with-lto \
   --with-ssl-default-suites=openssl \
 %if %{with valgrind}
