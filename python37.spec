@@ -1248,12 +1248,6 @@ CheckPython optimized
 %{dynload_dir}/_xxtestfuzz.%{SOABI_debug}.so
 %{dynload_dir}/zlib.%{SOABI_debug}.so
 
-# No need to split things out the "Makefile" and the config-32/64.h file as we
-# do for the regular build above (bug 531901), since they're all in one package
-# now; they're listed below, under "-devel":
-
-%{_libdir}/%{py_INSTSONAME_debug}
-
 # Analog of the -devel subpackage's files:
 %{pylibdir}/config-%{LDVERSION_debug}-%{_arch}-linux%{_gnu}
 %{_includedir}/python%{LDVERSION_debug}
