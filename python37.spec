@@ -2,10 +2,6 @@
 # Top-level metadata
 # ==================
 
-#gdb issue, can't solve with some #hacks
-# for ignoring warning: Installed (but unpackaged) file(s)
-%define _unpackaged_files_terminate_build 0
-
 # /usr/include/bits/stdio2.h: In function 'my_fgets':
 # /usr/include/bits/stdio2.h:258:2: warning: call to '__fgets_chk_warn' declared with attribute
 # warning: fgets called with bigger size than length of destination buffer [enabled by default]
@@ -21,13 +17,6 @@
 
 # pybasever without the dot:
 %global pyshortver 37
-
-# is this the EPEL 7 main Python 3?
-%if "%python3_pkgversion" == "%pyshortver"
-%global main_python3 1
-%else
-%global main_python3 0
-%endif
 
 Name: python37
 Summary: Interpreter of the Python programming language
@@ -72,13 +61,7 @@ License: Python
 # Main interpreter loop optimization
 %bcond_without computed_gotos
 
-# Support for the Valgrind debugger/profiler
-%ifnarch s390 %{mips} riscv64
 %bcond_without valgrind
-%else
-# Some arches don't have valgrind, disable support for it there.
-%bcond_without valgrind
-%endif
 
 
 # Notes from bootstraping Python 3.7:
@@ -147,6 +130,11 @@ License: Python
 # invocation of brp-python-hardlink (since this should still work for python3
 # pyc files)
 
+# Don't let RPM set SOURCE_DATE_EPOCH based on the latest %%changelog date
+# It breaks tests with: can't find '__main__' module in .../test_zip.zip
+# Reported at https://bugs.python.org/issue34022
+# Tracked at https://bugzilla.redhat.com/show_bug.cgi?id=1724753
+%global source_date_epoch_from_changelog 0
 
 # For multilib support, files that are different between 32- and 64-bit arches
 # need different filenames. Use "64" or "32" according to the word size.
@@ -169,11 +157,6 @@ BuildRequires: autoconf
 BuildRequires: bluez-libs-devel
 BuildRequires: bzip2
 BuildRequires: bzip2-devel
-
-%if 0%{?main_python3}
-BuildRequires: desktop-file-utils
-%endif
-
 BuildRequires: expat-devel
 
 BuildRequires: findutils
@@ -183,11 +166,6 @@ BuildRequires: gdbm-devel
 %endif
 BuildRequires: glibc-devel
 BuildRequires: gmp-devel
-
-%if 0%{?main_python3}
-BuildRequires: libappstream-glib
-%endif
-
 BuildRequires: libffi-devel
 BuildRequires: libGL-devel
 BuildRequires: libuuid-devel
@@ -225,7 +203,7 @@ Source: https://www.python.org/ftp/python/%{version}/Python-%{version}.tar.xz
 
 # A simple script to check timestamps of bytecode files
 # Run in check section with Python that is currently being built
-# Written by bkabrda
+# Originally written by bkabrda
 Source8: check-pyc-timestamps.py
 
 # Desktop menu entry for idle3
@@ -252,20 +230,6 @@ Patch102: 00102-lib64.patch
 # Downstream only: not appropriate for upstream
 Patch111: 00111-no-static-lib.patch
 
-# 00132 #
-# Add non-standard hooks to unittest for use in the "check" phase below, when
-# running selftests within the build:
-#   @unittest._skipInRpmBuild(reason)
-# for tests that hang or fail intermittently within the build environment, and:
-#   @unittest._expectedFailureInRpmBuild
-# for tests that always fail within the build environment
-#
-# The hooks only take effect if WITHIN_PYTHON_RPM_BUILD is set in the
-# environment, which we set manually in the appropriate portion of the "check"
-# phase below (and which potentially other python-* rpms could set, to reuse
-# these unittest hooks in their own "check" phases)
-Patch132: 00132-add-rpmbuild-hooks-to-unittest.patch
-
 # 00155 #
 # Avoid allocating thunks in ctypes unless absolutely necessary, to avoid
 # generating SELinux denials on "import ctypes" and "import uuid" when
@@ -273,19 +237,6 @@ Patch132: 00132-add-rpmbuild-hooks-to-unittest.patch
 # See https://bugzilla.redhat.com/show_bug.cgi?id=814391
 Patch155: 00155-avoid-ctypes-thunks.patch
 
-# 00160 #
-# Python 3.3 added os.SEEK_DATA and os.SEEK_HOLE, which may be present in the
-# header files in the build chroot, but may not be supported in the running
-# kernel, hence we disable this test in an rpm build.
-# Adding these was upstream issue http://bugs.python.org/issue10142
-# Not yet sent upstream
-Patch160: 00160-disable-test_fs_holes-in-rpm-build.patch
-
-# 00163 #
-# Some tests within test_socket fail intermittently when run inside Koji;
-# disable them using unittest._skipInRpmBuild
-# Not yet sent upstream
-Patch163: 00163-disable-parts-of-test_socket-in-rpm-build.patch
 
 # 00170 #
 # In debug builds, try to print repr() when a C-level assert fails in the
@@ -315,13 +266,13 @@ Patch205: 00205-make-libpl-respect-lib64.patch
 # Fedora Change: https://fedoraproject.org/wiki/Changes/Making_sudo_pip_safe
 Patch251: 00251-change-user-install-location.patch
 
-
 # 00274 #
 # Upstream uses Debian-style architecture naming. Change to match Fedora.
 Patch274: 00274-fix-arch-names.patch
 
-Patch189: 00189-use-rpm-wheels.patch
-
+# 00316 #
+# We remove the exe files from distutil's bdist_wininst
+# So we mark the command as unsupported - and the tests are skipped
 Patch316: 00316-mark-bdist_wininst-unsupported.patch
 
 # (New patches go here ^^^)
@@ -341,7 +292,6 @@ Patch316: 00316-mark-bdist_wininst-unsupported.patch
 # Packages with Python modules in standard locations automatically
 # depend on python(abi). Provide that here.
 Provides: python(abi) = %{pybasever}
-
 
 Requires: %{name}-libs%{?_isa} = %{version}-%{release}
 
@@ -422,14 +372,6 @@ Requires: redhat-rpm-config
 Provides: %{name}-2to3 = %{version}-%{release}
 
 Conflicts: %{name} < %{version}-%{release}
-
-%if 0%{?main_python3}
-# /usr/bin/2to3-3 will be moved from python34-tools to python36-devel once
-# python36 becomes the main Python 3 version in EPEL 7.
-# TODO Update the version of python34-tools below to
-# lastpackageversion-lastpackagerelease+1
-Conflicts: python34-tools < 3.4.8-2
-%endif
 
 %description devel
 This package contains the header files and configuration needed to compile
@@ -537,18 +479,9 @@ rm -r Modules/expat
 %patch102 -p1
 %endif
 %patch111 -p1
-%patch132 -p1
 %patch155 -p1
-%patch160 -p1
-%patch163 -p1
 %patch170 -p1
 %patch178 -p1
-
-%if %{with rpmwheels}
-%patch189 -p1
-rm Lib/ensurepip/_bundled/*.whl
-%endif
-
 %patch205 -p1
 %patch251 -p1
 %patch274 -p1
@@ -716,11 +649,7 @@ InstallPython() {
     DESTDIR=%{buildroot} \
     INSTALL="install -p" \
     EXTRA_CFLAGS="$MoreCFlags" \
-%if 0%{?main_python3}
-    install
-%else
-	altinstall
-%endif
+    altinstall
 
   popd
 
@@ -764,13 +693,11 @@ InstallPython debug \
   -O0 \
   %{LDVERSION_debug}
 
-%if ! 0%{?main_python3}
 # altinstall only creates pkgconfig/python-3.6.pc, not the version with ABIFAGS,
 #  so we need to move the debug .pc file to not overwrite it by optimized install
 mv \
   %{buildroot}%{_libdir}/pkgconfig/python-%{pybasever}.pc \
   %{buildroot}%{_libdir}/pkgconfig/python-%{LDVERSION_debug}.pc
-%endif
 
 %endif # with debug_build
 
@@ -791,22 +718,6 @@ install -d -m 0755 %{buildroot}%{pylibdir}/site-packages/__pycache__
 install -d -m 0755 %{buildroot}%{_prefix}/lib/python%{pybasever}/site-packages/__pycache__
 %endif
 
-%if 0%{main_python3}
-# add idle3 to menu if that is the main python3 in EPEL
-install -D -m 0644 Lib/idlelib/Icons/idle_16.png %{buildroot}%{_datadir}/icons/hicolor/16x16/apps/idle3.png
-install -D -m 0644 Lib/idlelib/Icons/idle_32.png %{buildroot}%{_datadir}/icons/hicolor/32x32/apps/idle3.png
-install -D -m 0644 Lib/idlelib/Icons/idle_48.png %{buildroot}%{_datadir}/icons/hicolor/48x48/apps/idle3.png
-desktop-file-install --dir=%{buildroot}%{_datadir}/applications %{SOURCE10}
-
-# Install and validate appdata file
-mkdir -p %{buildroot}%{_datadir}/appdata
-cp -a %{SOURCE11} %{buildroot}%{_datadir}/appdata
-appstream-util validate-relax --nonet %{buildroot}%{_datadir}/appdata/idle3.appdata.xml
-%endif
-
-%if 0%{main_python3}
-mv %{buildroot}%{_bindir}/2to3 %{buildroot}%{_bindir}/2to3-3
-%endif
 
 # Make sure distutils looks at the right pyconfig.h file
 # See https://bugzilla.redhat.com/show_bug.cgi?id=201434
@@ -885,14 +796,8 @@ ln -s \
   %{_bindir}/python%{LDVERSION_debug} \
   %{buildroot}%{_bindir}/python%{pybasever}-debug
 
-%if 0%{main_python3}
-ln -s \
-  %{_bindir}/python%{pybasever}-debug \
-  %{buildroot}%{_bindir}/python3-debug
-%endif
 %endif
 
-%if ! 0%{?main_python3}
 # make altinstall doesn't create python3.X-config, but we want it
 #  (we don't want to have just python3.Xm-config, that's a bit confusing)
 ln -s \
@@ -904,13 +809,10 @@ ln -s \
   %{buildroot}%{_libdir}/pkgconfig/python-%{LDVERSION_optimized}.pc
 # Remove stuff that would conflict with python3 package
 rm %{buildroot}%{_bindir}/pathfix.py
-%endif
 
 # remove libpython3.so in EPEL non-main python to not cause collision
 # between python3X and python3X+1(or+2) stacks...
-%if ! 0%{?main_python3}
 rm -f %{buildroot}%{_libdir}/libpython3.so
-%endif
 
 # Provide the python37 binary symlink.
 ln -s \
@@ -969,11 +871,7 @@ CheckPython() {
   # Show some info, helpful for debugging test failures
   LD_LIBRARY_PATH=$ConfDir $ConfDir/python -m test.pythoninfo
 
-  # Run the upstream test suite, setting "WITHIN_PYTHON_RPM_BUILD" so that the
-  # our non-standard decorators take effect on the relevant tests:
-  #   @unittest._skipInRpmBuild(reason)
-  #   @unittest._expectedFailureInRpmBuild
-  WITHIN_PYTHON_RPM_BUILD= \
+  # Run the upstream test suite
   LD_LIBRARY_PATH=$ConfDir $ConfDir/python -m test.regrtest \
     -wW --slowest -j0 \
     -x test_distutils \
@@ -981,9 +879,6 @@ CheckPython() {
     -x test_gdb \
     %ifarch %{mips64}
     -x test_ctypes \
-    %endif
-    %ifarch ppc64le
-    -x test_buffer \
     %endif
 
   echo FINISHED: CHECKING OF PYTHON FOR CONFIGURATION: $ConfName
@@ -1005,14 +900,7 @@ CheckPython optimized
 %license LICENSE
 %doc README.rst
 
-%if 0%{?main_python3}
-%{_bindir}/python3
-%{_bindir}/pyvenv
-%else
 %{_bindir}/pydoc%{pybasever}
-%endif
-
-%{_bindir}/python%{pyshortver}
 %{_bindir}/python%{pybasever}
 %{_bindir}/python%{pybasever}m
 %{_bindir}/pyvenv-%{pybasever}
@@ -1020,19 +908,10 @@ CheckPython optimized
 
 %files libs
 
-%if 0%{?main_python3}
-%license LICENSE
-%doc README.rst
-%endif
-
 %dir %{pylibdir}
 %dir %{dynload_dir}
 
 %{pylibdir}/lib2to3
-
-%if 0%{?main_python3}
-%exclude %{pylibdir}/lib2to3/tests
-%endif
 
 %dir %{pylibdir}/unittest/
 %dir %{pylibdir}/unittest/__pycache__/
@@ -1057,18 +936,9 @@ CheckPython optimized
 %dir %{pylibdir}/ensurepip/__pycache__/
 %{pylibdir}/ensurepip/*.py
 %{pylibdir}/ensurepip/__pycache__/*%{bytecode_suffixes}
-%{pylibdir}/ensurepip/_bundled
+%dir %{pylibdir}/ensurepip/_bundled
+%{pylibdir}/ensurepip/_bundled/*.whl
 
-%if 0%{?main_python3}
-%dir %{pylibdir}/test/
-%dir %{pylibdir}/test/__pycache__/
-%dir %{pylibdir}/test/support/
-%dir %{pylibdir}/test/support/__pycache__/
-%{pylibdir}/test/__init__.py
-%{pylibdir}/test/__pycache__/__init__%{bytecode_suffixes}
-%{pylibdir}/test/support/*.py
-%{pylibdir}/test/support/__pycache__/*%{bytecode_suffixes}
-%endif
 
 %dir %{pylibdir}/concurrent/
 %dir %{pylibdir}/concurrent/__pycache__/
@@ -1213,10 +1083,6 @@ CheckPython optimized
 %{pylibdir}/sqlite3/*.py
 %{pylibdir}/sqlite3/__pycache__/*%{bytecode_suffixes}
 
-%if 0%{?main_python3}
-%exclude %{pylibdir}/turtle.py
-%exclude %{pylibdir}/__pycache__/turtle*%{bytecode_suffixes}
-%endif
 
 %{pylibdir}/urllib
 %{pylibdir}/xml
@@ -1235,36 +1101,17 @@ CheckPython optimized
 %dir %{_includedir}/python%{LDVERSION_optimized}/
 %{_includedir}/python%{LDVERSION_optimized}/%{_pyconfig_h}
 %{_libdir}/%{py_INSTSONAME_optimized}
-# removed in EPEL, see explanation in install section
 
-%if 0%{?main_python3}
-%{_libdir}/libpython3.so
-%endif
 
 %files devel
-%if 0%{?main_python3}
-%{_bindir}/2to3-3
-%endif
 
 %{_bindir}/2to3-%{pybasever}
 %{pylibdir}/config-%{LDVERSION_optimized}-%{_arch}-linux%{_gnu}/*
-
-%if 0%{?main_python3}
-%exclude %{pylibdir}/config-%{LDVERSION_optimized}-%{_arch}-linux%{_gnu}/Makefile
-%exclude %{_includedir}/python%{LDVERSION_optimized}/%{_pyconfig_h}
-%endif
 
 %{_includedir}/python%{LDVERSION_optimized}/*.h
 %{_includedir}/python%{LDVERSION_optimized}/internal/
 %doc Misc/README.valgrind Misc/valgrind-python.supp Misc/gdbinit
 
-%if 0%{?main_python3}
-%{_bindir}/python3-config
-%{_libdir}/pkgconfig/python3.pc
-%{_bindir}/pathfix.py
-%{_bindir}/pygettext3.py
-%{_bindir}/msgfmt3.py
-%endif
 
 %{_bindir}/pygettext%{pybasever}.py
 %{_bindir}/msgfmt%{pybasever}.py
@@ -1277,28 +1124,15 @@ CheckPython optimized
 %{_libdir}/pkgconfig/python-%{pybasever}.pc
 
 
-%if 0%{?main_python3}
-%{_libdir}/pkgconfig/python3.pc
-%endif
 
 %files idle
-
-%{_bindir}/idle*
+%{_bindir}/idle%{pybasever}
 %{pylibdir}/idlelib
 
-%if 0%{?main_python3}
-%{_datadir}/appdata/idle3.appdata.xml
-%{_datadir}/applications/idle3.desktop
-%{_datadir}/icons/hicolor/*/apps/idle3.*
-%endif
 
 %files tkinter
 
 %{pylibdir}/tkinter
-
-%if 0%{?main_python3}
-%exclude %{pylibdir}/tkinter/test
-%endif
 
 %{dynload_dir}/_tkinter.%{SOABI_optimized}.so
 %{pylibdir}/turtle.py
@@ -1327,13 +1161,6 @@ CheckPython optimized
 # stuff already owned by the libs subpackage
 # test requires libs, so we are safe not owning those dirs
 
-%if 0%{?main_python3}
-%exclude %dir %{pylibdir}/test/
-%exclude %dir %{pylibdir}/test/__pycache__/
-%exclude %{pylibdir}/test/__init__.py
-%exclude %{pylibdir}/test/__pycache__/__init__%{bytecode_suffixes}
-%exclude %{pylibdir}/test/support/
-%endif
 
 # We don't bother splitting the debug build out into further subpackages:
 # if you need it, you're probably a developer.
@@ -1346,11 +1173,6 @@ CheckPython optimized
 
 # Analog of the core subpackage's files:
 %{_bindir}/python%{LDVERSION_debug}
-
-%if 0%{?main_python3}
-%{_bindir}/python3-debug
-%endif
-
 %{_bindir}/python%{pybasever}-debug
 
 # Analog of the -libs subpackage's files:
