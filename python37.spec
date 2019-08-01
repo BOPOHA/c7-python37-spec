@@ -901,6 +901,7 @@ CheckPython optimized
 %doc README.rst
 
 %{_bindir}/pydoc%{pybasever}
+%{_bindir}/python%{pyshortver}
 %{_bindir}/python%{pybasever}
 %{_bindir}/python%{pybasever}m
 %{_bindir}/pyvenv-%{pybasever}
