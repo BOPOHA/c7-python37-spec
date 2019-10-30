@@ -25,7 +25,7 @@ URL: https://www.python.org/
 #  WARNING  When rebasing to a new Python version,
 #           remember to update the python3-docs package as well
 Version: %{pybasever}.4
-Release: 1%{?dist}
+Release: 2%{?dist}
 License: Python
 
 
@@ -549,7 +549,7 @@ BuildPython() {
 
 %configure \
   --enable-ipv6 \
-  --enable-shared \
+  --disable-shared \
   --with-computed-gotos=%{computed_gotos_flag} \
   --with-dbmliborder=gdbm:ndbm:bdb \
   --with-system-expat \
